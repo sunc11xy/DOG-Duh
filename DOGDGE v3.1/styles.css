@@ -57,6 +57,46 @@ body {
   margin: 0 0 8px;
 }
 
+.thanks-card {
+  overflow: hidden;
+}
+
+.thanks-roll-wrap {
+  position: relative;
+  height: 220px;
+  overflow: hidden;
+  border: 1px solid #3f3f3f;
+  border-radius: 10px;
+  background: rgba(8, 8, 8, 0.85);
+  margin: 0 0 14px;
+}
+
+.thanks-roll {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  left: 0;
+  width: 100%;
+  animation: thanks-roll 16s linear infinite;
+}
+
+.thanks-roll li {
+  text-align: center;
+  padding: 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 0;
+}
+
+@keyframes thanks-roll {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
 .top-alert {
   position: fixed;
   z-index: 11;
@@ -169,6 +209,7 @@ body {
 .hud.compact select,
 .hud.compact .stats,
 .hud.compact #leaderboardBtn,
+.hud.compact #thanksBtn,
 .hud.compact #startBtn,
 .hud.compact #continueBtn,
 .hud.compact .customize-panel,

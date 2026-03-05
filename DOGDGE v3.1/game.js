@@ -8,6 +8,7 @@ const sideScoreEl = document.getElementById("sideScore");
 const recordBadgeEl = document.getElementById("recordBadge");
 const celebrateBtn = document.getElementById("celebrateBtn");
 const leaderboardBtn = document.getElementById("leaderboardBtn");
+const thanksBtn = document.getElementById("thanksBtn");
 const hudEl = document.querySelector(".hud");
 const levelSelect = document.getElementById("levelSelect");
 const startBtn = document.getElementById("startBtn");
@@ -24,6 +25,9 @@ const closeModalBtn = document.getElementById("closeModalBtn");
 const leaderboardModal = document.getElementById("leaderboardModal");
 const closeLeaderboardBtn = document.getElementById("closeLeaderboardBtn");
 const leaderboardListEl = document.getElementById("leaderboardList");
+const thanksModal = document.getElementById("thanksModal");
+const closeThanksBtn = document.getElementById("closeThanksBtn");
+const thanksListEl = document.getElementById("thanksList");
 const levelInfoTitleEl = document.getElementById("levelInfoTitle");
 const levelInfoSummaryEl = document.getElementById("levelInfoSummary");
 const levelInfoListEl = document.getElementById("levelInfoList");
@@ -49,6 +53,15 @@ const LEADERBOARD_ENTRIES = [
   { name: "name", point: 0, completionLevels: "Song - Singer - N/5 Revivals" },
   { name: "name", point: 0, completionLevels: "Song - Singer - N/5 Revivals" },
   { name: "name", point: 0, completionLevels: "Song - Singer - N/5 Revivals" },
+];
+
+// Thank You Names Section (safe to edit this list)
+const THANK_YOU_NAMES = [
+  "Justin Sunchen",
+  "Ryo Shoji",
+  "Friends and Players",
+  "Dogdge Community",
+  "You",
 ];
 
 const LEVELS = {
@@ -245,6 +258,30 @@ function openLeaderboardModal() {
 function closeLeaderboardModal() {
   if (!leaderboardModal) return;
   leaderboardModal.classList.add("hidden");
+}
+
+function renderThanksList() {
+  if (!thanksListEl) return;
+  thanksListEl.innerHTML = "";
+  const names = THANK_YOU_NAMES.length > 0 ? THANK_YOU_NAMES : ["Thank you for playing!"];
+  for (let i = 0; i < 2; i += 1) {
+    for (const name of names) {
+      const li = document.createElement("li");
+      li.textContent = name;
+      thanksListEl.appendChild(li);
+    }
+  }
+}
+
+function openThanksModal() {
+  if (!thanksModal) return;
+  renderThanksList();
+  thanksModal.classList.remove("hidden");
+}
+
+function closeThanksModal() {
+  if (!thanksModal) return;
+  thanksModal.classList.add("hidden");
 }
 
 function getScriptedPatternAtTime(cfg, time) {
@@ -1327,6 +1364,14 @@ if (closeLeaderboardBtn) {
   closeLeaderboardBtn.addEventListener("click", closeLeaderboardModal);
 }
 
+if (thanksBtn) {
+  thanksBtn.addEventListener("click", openThanksModal);
+}
+
+if (closeThanksBtn) {
+  closeThanksBtn.addEventListener("click", closeThanksModal);
+}
+
 // Fallback delegation: keeps leaderboard controls working even with stale cached listeners.
 document.addEventListener("click", (e) => {
   const target = e.target;
@@ -1339,8 +1384,20 @@ document.addEventListener("click", (e) => {
     closeLeaderboardModal();
     return;
   }
+  if (target.id === "thanksBtn") {
+    openThanksModal();
+    return;
+  }
+  if (target.id === "closeThanksBtn") {
+    closeThanksModal();
+    return;
+  }
   if (target.id === "leaderboardModal") {
     closeLeaderboardModal();
+    return;
+  }
+  if (target.id === "thanksModal") {
+    closeThanksModal();
   }
 });
 
