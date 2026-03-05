@@ -7,6 +7,7 @@ const blindTopEl = document.getElementById("blindTop");
 const sideScoreEl = document.getElementById("sideScore");
 const recordBadgeEl = document.getElementById("recordBadge");
 const celebrateBtn = document.getElementById("celebrateBtn");
+const leaderboardBtn = document.getElementById("leaderboardBtn");
 const hudEl = document.querySelector(".hud");
 const levelSelect = document.getElementById("levelSelect");
 const startBtn = document.getElementById("startBtn");
@@ -20,6 +21,9 @@ const obstacleColorRow = document.querySelector(".obstacle-color-row");
 const obstacleFrameRow = document.querySelector(".obstacle-frame-row");
 const blindInfoModal = document.getElementById("blindInfoModal");
 const closeModalBtn = document.getElementById("closeModalBtn");
+const leaderboardModal = document.getElementById("leaderboardModal");
+const closeLeaderboardBtn = document.getElementById("closeLeaderboardBtn");
+const leaderboardListEl = document.getElementById("leaderboardList");
 const levelInfoTitleEl = document.getElementById("levelInfoTitle");
 const levelInfoSummaryEl = document.getElementById("levelInfoSummary");
 const levelInfoListEl = document.getElementById("levelInfoList");
@@ -37,6 +41,15 @@ const WARNING_SECONDS = 3;
 const DEFAULT_EVENT_TARGET_COUNT = 7;
 const DEFAULT_EVENT_GAP_MIN = 20;
 const DEFAULT_EVENT_GAP_MAX = 42;
+
+// Edit this list only to update leaderboard data safely.
+const LEADERBOARD_ENTRIES = [
+  { name: "Ari", point: 215, completionLevels: "1,2,3" },
+  { name: "Jin", point: 208, completionLevels: "1,2" },
+  { name: "Mina", point: 201, completionLevels: "1,3" },
+  { name: "Noah", point: 197, completionLevels: "1,2" },
+  { name: "Kai", point: 190, completionLevels: "1" },
+];
 
 const LEVELS = {
   spaghetti: {
@@ -96,8 +109,6 @@ const LEVELS = {
     audioEnd: null,
     spawnMode: "scripted",
     eventMode: "none",
-    halfScreenAt: 170,
-    halfScreenDuration: 5,
     phaseSchedule: [
       { until: 65, pattern: "down" },
       { until: 80, pattern: "up" },
@@ -106,9 +117,10 @@ const LEVELS = {
       { until: Number.POSITIVE_INFINITY, pattern: "mix" },
     ],
     playerSpeedMult: 1.05,
-    spawnRateMult: 0.98,
-    hazardCountMult: 0.9,
-    maxHazardsMult: 0.95,
+    spawnRateMult: 0.88,
+    hazardCountMult: 0.78,
+    maxHazardsMult: 0.82,
+    hazardSpeedMult: 0.9,
     bgColor: "#0a0a0a",
     hazardColor: "rgba(255, 255, 255, ALPHA)",
     playerColor: "#f2f2f2",
@@ -131,6 +143,7 @@ const state = {
   maxRevives: 5,
   revivesUsed: 0,
   invulnerableUntil: -1,
+  invincible: false,
   time: 0,
   spawnTimer: 0,
   speedScale: 1,
@@ -138,9 +151,6 @@ const state = {
   nextEventAt: Infinity,
   blindActiveUntil: -1,
   reverseFlashUntil: -1,
-  halfScreenUntil: -1,
-  halfScreenTriggered: false,
-  halfScreenZone: null,
   recordBadgeUntil: -1,
   recordShownThisRun: false,
   recordConfettiUntil: -1,
@@ -216,8 +226,25 @@ function syncObstaclePickers() {
   if (obstacleFramePicker) obstacleFramePicker.value = state.level3ObstacleFrame || "#ff69b4";
 }
 
-function rectsIntersect(a, b) {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+function renderLeaderboard() {
+  if (!leaderboardListEl) return;
+  leaderboardListEl.innerHTML = "";
+  for (const entry of LEADERBOARD_ENTRIES.slice(0, 5)) {
+    const li = document.createElement("li");
+    li.textContent = `${entry.name} - ${entry.point} - ${entry.completionLevels}`;
+    leaderboardListEl.appendChild(li);
+  }
+}
+
+function openLeaderboardModal() {
+  if (!leaderboardModal) return;
+  renderLeaderboard();
+  leaderboardModal.classList.remove("hidden");
+}
+
+function closeLeaderboardModal() {
+  if (!leaderboardModal) return;
+  leaderboardModal.classList.add("hidden");
 }
 
 function getScriptedPatternAtTime(cfg, time) {
@@ -287,13 +314,14 @@ function getLevelInfo(levelKey) {
     bullets: [
       "No BLIND and no REVERSE.",
       "Direction phases switch over time, with 3-second switch warnings.",
-      "At 2:50, HALF SCREEN triggers for 5 seconds and becomes lethal.",
+      "No BLANK and no half-screen effects.",
     ],
   };
 }
 
 function showLevelInfoModal(levelKey) {
   if (!blindInfoModal || !levelInfoTitleEl || !levelInfoSummaryEl || !levelInfoListEl) return;
+  closeLeaderboardModal();
   const info = getLevelInfo(levelKey);
   levelInfoTitleEl.textContent = info.title;
   levelInfoSummaryEl.textContent = info.summary;
@@ -447,40 +475,6 @@ function isReverseFlashActive() {
   return getLevel().eventMode === "reverse" && state.running && !state.paused && state.time < state.reverseFlashUntil;
 }
 
-function isHalfScreenActive() {
-  return getLevel().key === "rude" && state.running && !state.paused && state.time < state.halfScreenUntil && !!state.halfScreenZone;
-}
-
-function createHalfScreenZone() {
-  const vertical = Math.random() < 0.5;
-  if (vertical) {
-    const left = Math.random() < 0.5;
-    return left
-      ? { x: 0, y: 0, w: canvas.width / 2, h: canvas.height }
-      : { x: canvas.width / 2, y: 0, w: canvas.width / 2, h: canvas.height };
-  }
-
-  const top = Math.random() < 0.5;
-  return top
-    ? { x: 0, y: 0, w: canvas.width, h: canvas.height / 2 }
-    : { x: 0, y: canvas.height / 2, w: canvas.width, h: canvas.height / 2 };
-}
-
-function maybeTriggerHalfScreen() {
-  const cfg = getLevel();
-  if (cfg.key !== "rude") return;
-
-  if (!state.halfScreenTriggered && state.time >= cfg.halfScreenAt) {
-    state.halfScreenTriggered = true;
-    state.halfScreenZone = createHalfScreenZone();
-    state.halfScreenUntil = state.time + cfg.halfScreenDuration;
-  }
-
-  if (state.time >= state.halfScreenUntil) {
-    state.halfScreenZone = null;
-  }
-}
-
 function updateTopAlert() {
   if (!blindTopEl) return;
 
@@ -490,20 +484,15 @@ function updateTopAlert() {
     return;
   }
 
+  if (state.invincible) {
+    blindTopEl.textContent = "INVINCIBLE";
+    blindTopEl.classList.add("show");
+    return;
+  }
+
   const cfg = getLevel();
   if (cfg.eventMode === "none") {
     if (cfg.key === "rude") {
-      if (isHalfScreenActive()) {
-        blindTopEl.textContent = "HALF SCREEN";
-        blindTopEl.classList.add("show");
-        return;
-      }
-      const untilHalf = cfg.halfScreenAt - state.time;
-      if (!state.halfScreenTriggered && untilHalf <= WARNING_SECONDS && untilHalf > 0) {
-        blindTopEl.textContent = `HALF SCREEN IN ${untilHalf.toFixed(1)}s`;
-        blindTopEl.classList.add("show");
-        return;
-      }
       const boundaries = (cfg.phaseSchedule || [])
         .map((phase) => phase.until)
         .filter((until) => Number.isFinite(until) && until > state.time);
@@ -595,9 +584,6 @@ function resetGame() {
   state.nextEventAt = Infinity;
   state.blindActiveUntil = -1;
   state.reverseFlashUntil = -1;
-  state.halfScreenUntil = -1;
-  state.halfScreenTriggered = false;
-  state.halfScreenZone = null;
   state.recordBadgeUntil = -1;
   state.recordShownThisRun = false;
   state.recordConfettiUntil = -1;
@@ -623,13 +609,9 @@ function resetGame() {
 function spawnHazard() {
   const cfg = getLevel();
   const size = 16 + Math.random() * 24;
-  const speed = (130 + Math.random() * 170) * state.speedScale;
+  const speed = (130 + Math.random() * 170) * state.speedScale * (cfg.hazardSpeedMult || 1);
   const alpha = 0.65 + Math.random() * 0.35;
   const pushHazard = (hazard) => {
-    if (isHalfScreenActive()) {
-      const box = { x: hazard.x, y: hazard.y, w: hazard.size, h: hazard.size };
-      if (rectsIntersect(box, state.halfScreenZone)) return false;
-    }
     state.hazards.push(hazard);
     return true;
   };
@@ -728,8 +710,6 @@ function reviveFromGameOver() {
   state.paused = false;
   state.invulnerableUntil = state.time + 1;
   state.hazards.length = 0;
-  state.halfScreenUntil = -1;
-  state.halfScreenZone = null;
 
   if (pauseBtn) pauseBtn.textContent = "Pause";
   updateReviveDisplay();
@@ -868,7 +848,6 @@ function update(dt) {
   }
 
   maybeTriggerLevelEvent();
-  maybeTriggerHalfScreen();
 
   const moveX = (state.keys.has("ArrowRight") || state.keys.has("d") ? 1 : 0) -
     (state.keys.has("ArrowLeft") || state.keys.has("a") ? 1 : 0);
@@ -911,13 +890,6 @@ function update(dt) {
     hazard.y += hazard.vy * dt;
   }
 
-  if (isHalfScreenActive()) {
-    state.hazards = state.hazards.filter((hazard) => {
-      const box = { x: hazard.x, y: hazard.y, w: hazard.size, h: hazard.size };
-      return !rectsIntersect(box, state.halfScreenZone);
-    });
-  }
-
   if (cfg.spawnMode === "vertical") {
     state.hazards = state.hazards.filter((h) => h.y < canvas.height + h.size);
   } else if (cfg.spawnMode === "horizontal") {
@@ -939,19 +911,8 @@ function update(dt) {
       h.y < state.player.y + state.player.h &&
       h.y + h.size > state.player.y
     ) {
+      if (state.invincible) continue;
       if (state.time < state.invulnerableUntil) continue;
-      if (state.revivesUsed < state.maxRevives) {
-        triggerCollisionGameOver();
-      } else {
-        handleGameOver();
-      }
-      return;
-    }
-  }
-
-  if (isHalfScreenActive()) {
-    const playerBox = { x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h };
-    if (rectsIntersect(playerBox, state.halfScreenZone)) {
       if (state.revivesUsed < state.maxRevives) {
         triggerCollisionGameOver();
       } else {
@@ -1109,14 +1070,6 @@ function draw() {
     }
   }
 
-  if (isHalfScreenActive()) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
-    ctx.fillRect(state.halfScreenZone.x, state.halfScreenZone.y, state.halfScreenZone.w, state.halfScreenZone.h);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(state.halfScreenZone.x, state.halfScreenZone.y, state.halfScreenZone.w, state.halfScreenZone.h);
-  }
-
   const playerFill = getPlayerFillColor();
   const playerStroke = getPlayerStrokeColor(playerFill);
   ctx.fillStyle = playerFill;
@@ -1183,6 +1136,30 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
+function returnToHome() {
+  stopAudio();
+  stopBackgroundVideo(true);
+  state.running = false;
+  state.over = false;
+  state.paused = false;
+  state.won = false;
+  state.showcaseWin = false;
+  state.awaitingRevive = false;
+  state.time = 0;
+  state.spawnTimer = 0;
+  state.eventsTriggered = 0;
+  state.hazards.length = 0;
+  state.keys.clear();
+  state.player.x = canvas.width / 2 - state.player.w / 2;
+  state.player.y = canvas.height - 90;
+  if (pauseBtn) pauseBtn.textContent = "Pause";
+  prepareAudio();
+  updateScoreDisplay();
+  updateTopAlert();
+  updateRecordBadge();
+  updateHudMode();
+}
+
 function togglePause() {
   if (!state.running || state.over || state.won) return;
   state.paused = !state.paused;
@@ -1215,9 +1192,6 @@ function jumpToRudeMix() {
   state.time = mixStart;
   state.spawnTimer = 0;
   state.hazards.length = 0;
-  state.halfScreenUntil = -1;
-  state.halfScreenTriggered = false;
-  state.halfScreenZone = null;
 
   if (state.audio) {
     const cfg = getLevel();
@@ -1237,15 +1211,22 @@ function jumpToRudeMix() {
 }
 
 window.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.shiftKey && (e.key === "v" || e.key === "V")) {
+    e.preventDefault();
+    state.invincible = !state.invincible;
+    updateTopAlert();
+    return;
+  }
+
   if (e.ctrlKey && e.shiftKey && (e.key === "m" || e.key === "M")) {
     e.preventDefault();
     jumpToRudeMix();
     return;
   }
 
-  if ((e.key === "Escape" || e.key === "Esc") && state.running) {
+  if ((e.key === "Escape" || e.key === "Esc") && (state.running || state.over || state.won || state.paused)) {
     e.preventDefault();
-    resetGame();
+    returnToHome();
     return;
   }
 
@@ -1336,6 +1317,14 @@ if (obstacleFramePicker) {
   obstacleFramePicker.addEventListener("input", () => {
     state.level3ObstacleFrame = obstacleFramePicker.value;
   });
+}
+
+if (leaderboardBtn) {
+  leaderboardBtn.addEventListener("click", openLeaderboardModal);
+}
+
+if (closeLeaderboardBtn) {
+  closeLeaderboardBtn.addEventListener("click", closeLeaderboardModal);
 }
 
 if (startBtn) {

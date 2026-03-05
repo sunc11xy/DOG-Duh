@@ -15,6 +15,13 @@
         <button id="closeModalBtn">I understand</button>
       </div>
     </div>
+    <div id="leaderboardModal" class="modal hidden">
+      <div class="modal-card">
+        <h2>Leaderboard (Top 5)</h2>
+        <ul id="leaderboardList"></ul>
+        <button id="closeLeaderboardBtn">Close</button>
+      </div>
+    </div>
 
     <div id="blindTop" class="top-alert">BLIND IN 3.0s</div>
     <div id="sideScore" class="side-score">0s / 0s</div>
@@ -57,6 +64,7 @@
           <span>Best: <strong id="best">0</strong></span>
           <span>Revives: <strong id="revives">5</strong></span>
         </div>
+        <button id="leaderboardBtn">Leaderboard</button>
         <button id="startBtn">Start / Restart</button>
         <button id="continueBtn" hidden>Revive</button>
         <button id="pauseBtn">Pause</button>

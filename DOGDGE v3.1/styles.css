@@ -168,6 +168,7 @@ body {
 .hud.compact label,
 .hud.compact select,
 .hud.compact .stats,
+.hud.compact #leaderboardBtn,
 .hud.compact #startBtn,
 .hud.compact #continueBtn,
 .hud.compact .customize-panel,
