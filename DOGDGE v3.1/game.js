@@ -1327,6 +1327,23 @@ if (closeLeaderboardBtn) {
   closeLeaderboardBtn.addEventListener("click", closeLeaderboardModal);
 }
 
+// Fallback delegation: keeps leaderboard controls working even with stale cached listeners.
+document.addEventListener("click", (e) => {
+  const target = e.target;
+  if (!(target instanceof Element)) return;
+  if (target.id === "leaderboardBtn") {
+    openLeaderboardModal();
+    return;
+  }
+  if (target.id === "closeLeaderboardBtn") {
+    closeLeaderboardModal();
+    return;
+  }
+  if (target.id === "leaderboardModal") {
+    closeLeaderboardModal();
+  }
+});
+
 if (startBtn) {
   startBtn.addEventListener("click", resetGame);
 }
