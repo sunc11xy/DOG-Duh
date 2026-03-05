@@ -42,13 +42,13 @@ const DEFAULT_EVENT_TARGET_COUNT = 7;
 const DEFAULT_EVENT_GAP_MIN = 20;
 const DEFAULT_EVENT_GAP_MAX = 42;
 
-// Edit this list only to update leaderboard data safely.
+// Leaderboard Adjustment Section (Do not change anything else)
 const LEADERBOARD_ENTRIES = [
-  { name: "Ari", point: 215, completionLevels: "1,2,3" },
-  { name: "Jin", point: 208, completionLevels: "1,2" },
-  { name: "Mina", point: 201, completionLevels: "1,3" },
-  { name: "Noah", point: 197, completionLevels: "1,2" },
-  { name: "Kai", point: 190, completionLevels: "1" },
+  { name: "Ryo Shoji", point: 25, completionLevels: "MiniSkirt - AOA - 5/5 Revivals" },
+  { name: "name", point: 0, completionLevels: "Song - Singer - N/5 Revivals" },
+  { name: "name", point: 0, completionLevels: "Song - Singer - N/5 Revivals" },
+  { name: "name", point: 0, completionLevels: "Song - Singer - N/5 Revivals" },
+  { name: "name", point: 0, completionLevels: "Song - Singer - N/5 Revivals" },
 ];
 
 const LEVELS = {
