@@ -1,7 +1,7 @@
 # DOG-Duh
 
 A tiny HTML dodge obstacle browser game! Try it out now...
-https://sunc11xy.github.io/DOGDGE/DOGDGE%20v3.1/
+https://github.com/sunc11xy/DOG-Duh
 
 ## Contact
 Find me in my room or via sunchxy@gmail.com if you have any questions or suggestions.
