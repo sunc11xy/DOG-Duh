@@ -1791,13 +1791,6 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (e.ctrlKey && e.shiftKey && (e.key === "h" || e.key === "H")) {
-    e.preventDefault();
-    pushCodeLog("debug.showcaseWin()");
-    enterShowcaseWin();
-    return;
-  }
-
   if ((e.key === "c" || e.key === "C") && state.over && state.awaitingRevive) {
     e.preventDefault();
     reviveFromGameOver();
