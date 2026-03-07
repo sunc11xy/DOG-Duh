@@ -49,6 +49,14 @@ const revivesTextEl = document.getElementById("revivesText");
 const leaderboardTitleEl = document.getElementById("leaderboardTitle");
 const codePanelTitleEl = document.getElementById("codePanelTitle");
 const codeLogEl = document.getElementById("codeLog");
+const mobileControlsEl = document.getElementById("mobileControls");
+const ctrlUpEl = document.getElementById("ctrlUp");
+const ctrlLeftEl = document.getElementById("ctrlLeft");
+const ctrlDownEl = document.getElementById("ctrlDown");
+const ctrlRightEl = document.getElementById("ctrlRight");
+const HAS_TOUCH_CONTROLS = Boolean(
+  (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || navigator.maxTouchPoints > 0
+);
 
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -113,7 +121,7 @@ const I18N = {
     level1Bullet3: "BLIND duration shrinks as speed increases.",
     level2Bullet1: "Obstacle flow starts left-to-right only.",
     level2Bullet2: "Random REVERSE events switch direction to right-to-left (and back).",
-    level2Bullet3: "No color reverse.",
+    level2Bullet3: "Extra PAUSE events freeze all obstacles for 0.5 seconds.",
     level3Bullet1: "No BLIND and no REVERSE.",
     level3Bullet2: "Direction phases switch over time, with 3-second switch warnings.",
     level3Bullet3: "No BLANK and no half-screen effects.",
@@ -122,6 +130,8 @@ const I18N = {
     blindIn: "BLIND IN {value}s",
     reverseNow: "REVERSE!",
     reverseIn: "REVERSE IN {value}s",
+    pauseNow: "PAUSE",
+    pauseIn: "PAUSE IN {value}s",
     paused: "Paused",
     pressSpaceContinue: "Press Space to continue",
     pressToStart: "press to start",
@@ -177,7 +187,7 @@ const I18N = {
     level1Bullet3: "随着速度提升，BLIND 时间会缩短。",
     level2Bullet1: "障碍先只从左往右。",
     level2Bullet2: "会随机触发 REVERSE，切换为右往左（再切回）。",
-    level2Bullet3: "不再有颜色反转。",
+    level2Bullet3: "额外有 PAUSE：所有障碍会暂停 0.5 秒。",
     level3Bullet1: "没有 BLIND，也没有 REVERSE。",
     level3Bullet2: "方向会分阶段切换，并提前 3 秒提示。",
     level3Bullet3: "没有 BLANK，也没有半屏效果。",
@@ -186,6 +196,8 @@ const I18N = {
     blindIn: "{value}s 后 BLIND",
     reverseNow: "反转！",
     reverseIn: "{value}s 后反转",
+    pauseNow: "暂停",
+    pauseIn: "{value}s 后暂停",
     paused: "已暂停",
     pressSpaceContinue: "按空格继续",
     pressToStart: "按空格开始",
@@ -251,6 +263,10 @@ const LEVELS = {
     eventTargetCount: 10,
     eventGapMin: 14,
     eventGapMax: 28,
+    pauseDuration: 0.5,
+    pauseEventTargetCount: 9,
+    pauseEventGapMin: 15,
+    pauseEventGapMax: 30,
     playerSpeedMult: 1.2,
     spawnRateMult: 0.84,
     hazardCountMult: 0.82,
@@ -312,6 +328,9 @@ const state = {
   level2Direction: 1,
   eventsTriggered: 0,
   nextEventAt: Infinity,
+  level2PauseEventsTriggered: 0,
+  level2PauseNextAt: Infinity,
+  level2PauseActiveUntil: -1,
   blindActiveUntil: -1,
   reverseFlashUntil: -1,
   recordBadgeUntil: -1,
@@ -333,12 +352,6 @@ const state = {
   player: { x: canvas.width / 2 - 16, y: canvas.height - 90, w: 32, h: 32, speed: 290 },
   hazards: [],
   keys: new Set(),
-  touchControl: {
-    active: false,
-    pointerId: null,
-    targetX: 0,
-    targetY: 0,
-  },
   codeLogLines: [],
   codeLogQueue: [],
   codeTyping: false,
@@ -635,14 +648,6 @@ function syncObstaclePickers() {
   if (obstacleFramePicker) {
     obstacleFramePicker.value = state.level3ObstacleFrame || (cfg.key === "chu" ? "#2d2d2d" : "#ff69b4");
   }
-}
-
-function setTouchTargetFromClient(clientX, clientY) {
-  const rect = canvas.getBoundingClientRect();
-  const x = ((clientX - rect.left) / rect.width) * canvas.width;
-  const y = ((clientY - rect.top) / rect.height) * canvas.height;
-  state.touchControl.targetX = x;
-  state.touchControl.targetY = y;
 }
 
 function roundedRectPath(x, y, w, h, r) {
@@ -1013,6 +1018,31 @@ function scheduleNextEvent(fromTime) {
   state.nextEventAt = fromTime + gap;
 }
 
+function scheduleNextLevel2Pause(fromTime) {
+  const cfg = getLevel();
+  if (cfg.key !== "chu") {
+    state.level2PauseNextAt = Number.POSITIVE_INFINITY;
+    return;
+  }
+
+  const targetCount = cfg.pauseEventTargetCount || DEFAULT_EVENT_TARGET_COUNT;
+  const gapMin = cfg.pauseEventGapMin || DEFAULT_EVENT_GAP_MIN;
+  const gapMax = cfg.pauseEventGapMax || DEFAULT_EVENT_GAP_MAX;
+
+  if (state.level2PauseEventsTriggered >= targetCount) {
+    state.level2PauseNextAt = Infinity;
+    return;
+  }
+
+  const remainingTime = Math.max(1, getTargetDuration() - fromTime);
+  const remainingEvents = Math.max(1, targetCount - state.level2PauseEventsTriggered);
+  const baseGap = remainingTime / remainingEvents;
+  const jitter = baseGap * 0.28;
+  const rawGap = baseGap + (Math.random() * 2 - 1) * jitter;
+  const gap = Math.max(gapMin, Math.min(gapMax, rawGap));
+  state.level2PauseNextAt = fromTime + gap;
+}
+
 function getBlindDuration() {
   const cfg = getLevel();
   return Math.max(cfg.blindMin, cfg.blindStart - state.time * cfg.blindShrinkPerSecond);
@@ -1024,6 +1054,10 @@ function isBlindActive() {
 
 function isReverseFlashActive() {
   return getLevel().eventMode === "reverse" && state.running && !state.paused && state.time < state.reverseFlashUntil;
+}
+
+function isLevel2PauseActive() {
+  return getLevel().key === "chu" && state.running && !state.paused && state.time < state.level2PauseActiveUntil;
 }
 
 function updateTopAlert() {
@@ -1072,11 +1106,24 @@ function updateTopAlert() {
     blindTopEl.classList.add("show");
     return;
   }
-  const untilEvent = state.nextEventAt - state.time;
-  if (untilEvent <= WARNING_SECONDS) {
-    blindTopEl.textContent = t("reverseIn", { value: untilEvent.toFixed(1) });
+  if (isLevel2PauseActive()) {
+    blindTopEl.textContent = t("pauseNow");
     blindTopEl.classList.add("show");
+    return;
   }
+
+  const untilReverse = state.nextEventAt - state.time;
+  const untilPause = state.level2PauseNextAt - state.time;
+  const showReverse = untilReverse <= WARNING_SECONDS;
+  const showPause = untilPause <= WARNING_SECONDS;
+  if (!showReverse && !showPause) return;
+
+  if (showPause && (!showReverse || untilPause <= untilReverse)) {
+    blindTopEl.textContent = t("pauseIn", { value: Math.max(0, untilPause).toFixed(1) });
+  } else {
+    blindTopEl.textContent = t("reverseIn", { value: Math.max(0, untilReverse).toFixed(1) });
+  }
+  blindTopEl.classList.add("show");
 }
 
 function updateRecordBadge() {
@@ -1129,6 +1176,9 @@ function resetGame() {
   state.level2Direction = 1;
   state.eventsTriggered = 0;
   state.nextEventAt = Infinity;
+  state.level2PauseEventsTriggered = 0;
+  state.level2PauseNextAt = Infinity;
+  state.level2PauseActiveUntil = -1;
   state.blindActiveUntil = -1;
   state.reverseFlashUntil = -1;
   state.recordBadgeUntil = -1;
@@ -1137,8 +1187,6 @@ function resetGame() {
   state.recordConfetti = [];
   state.pauseTypedStartMs = 0;
   state.gameOverTypedStartMs = 0;
-  state.touchControl.active = false;
-  state.touchControl.pointerId = null;
   state.hazards.length = 0;
   state.player.x = canvas.width / 2 - state.player.w / 2;
   state.player.y = canvas.height - 90;
@@ -1150,6 +1198,7 @@ function resetGame() {
   startBackgroundVideo();
 
   scheduleNextEvent(0);
+  scheduleNextLevel2Pause(0);
   pushCodeLog("game.start()", `song=${getLevel().songLabel}`);
   updateReviveDisplay();
   updateScoreDisplay();
@@ -1228,8 +1277,6 @@ function handleGameOver() {
   state.showcaseWin = false;
   state.awaitingRevive = false;
   state.gameOverTypedStartMs = performance.now();
-  state.touchControl.active = false;
-  state.touchControl.pointerId = null;
 
   if (state.score > state.best) {
     state.best = state.score;
@@ -1250,8 +1297,6 @@ function triggerCollisionGameOver() {
   state.showcaseWin = false;
   state.awaitingRevive = state.revivesUsed < state.maxRevives;
   state.gameOverTypedStartMs = performance.now();
-  state.touchControl.active = false;
-  state.touchControl.pointerId = null;
   if (state.audio) state.audio.pause();
   stopBackgroundVideo();
   updateTopAlert();
@@ -1383,6 +1428,16 @@ function maybeTriggerLevelEvent() {
   scheduleNextEvent(state.time);
 }
 
+function maybeTriggerLevel2Pause() {
+  const cfg = getLevel();
+  if (cfg.key !== "chu") return;
+  if (state.time < state.level2PauseNextAt) return;
+
+  state.level2PauseEventsTriggered += 1;
+  state.level2PauseActiveUntil = state.time + (cfg.pauseDuration || 0.5);
+  scheduleNextLevel2Pause(state.time);
+}
+
 function update(dt) {
   if (!state.running || state.paused) return;
 
@@ -1413,23 +1468,16 @@ function update(dt) {
   }
 
   maybeTriggerLevelEvent();
+  maybeTriggerLevel2Pause();
 
-  if (state.touchControl.active) {
-    const targetX = state.touchControl.targetX - state.player.w / 2;
-    const targetY = state.touchControl.targetY - state.player.h / 2;
-    const follow = Math.min(1, dt * 18);
-    state.player.x += (targetX - state.player.x) * follow;
-    state.player.y += (targetY - state.player.y) * follow;
-  } else {
-    const moveX = (state.keys.has("ArrowRight") || state.keys.has("d") ? 1 : 0) -
-      (state.keys.has("ArrowLeft") || state.keys.has("a") ? 1 : 0);
-    const moveY = (state.keys.has("ArrowDown") || state.keys.has("s") ? 1 : 0) -
-      (state.keys.has("ArrowUp") || state.keys.has("w") ? 1 : 0);
+  const moveX = (state.keys.has("ArrowRight") || state.keys.has("d") ? 1 : 0) -
+    (state.keys.has("ArrowLeft") || state.keys.has("a") ? 1 : 0);
+  const moveY = (state.keys.has("ArrowDown") || state.keys.has("s") ? 1 : 0) -
+    (state.keys.has("ArrowUp") || state.keys.has("w") ? 1 : 0);
 
-    const playerSpeed = state.player.speed * cfg.playerSpeedMult;
-    state.player.x += moveX * playerSpeed * dt;
-    state.player.y += moveY * playerSpeed * dt;
-  }
+  const playerSpeed = state.player.speed * cfg.playerSpeedMult;
+  state.player.x += moveX * playerSpeed * dt;
+  state.player.y += moveY * playerSpeed * dt;
 
   state.player.x = Math.max(0, Math.min(canvas.width - state.player.w, state.player.x));
   state.player.y = Math.max(0, Math.min(canvas.height - state.player.h, state.player.y));
@@ -1450,17 +1498,20 @@ function update(dt) {
     maxHazards = Math.max(10, Math.floor(maxHazards * 0.7));
   }
   const spawnInterval = Math.max(0.06, BASE_SPAWN_INTERVAL / Math.max(0.3, densityScale * runtimeScale));
+  const hazardsPaused = isLevel2PauseActive();
 
-  while (state.spawnTimer >= spawnInterval) {
-    state.spawnTimer -= spawnInterval;
-    for (let i = 0; i < hazardsPerSpawn && state.hazards.length < maxHazards; i += 1) {
-      spawnHazard();
+  if (!hazardsPaused) {
+    while (state.spawnTimer >= spawnInterval) {
+      state.spawnTimer -= spawnInterval;
+      for (let i = 0; i < hazardsPerSpawn && state.hazards.length < maxHazards; i += 1) {
+        spawnHazard();
+      }
     }
-  }
 
-  for (const hazard of state.hazards) {
-    hazard.x += hazard.vx * dt;
-    hazard.y += hazard.vy * dt;
+    for (const hazard of state.hazards) {
+      hazard.x += hazard.vx * dt;
+      hazard.y += hazard.vy * dt;
+    }
   }
 
   if (cfg.spawnMode === "vertical") {
@@ -1764,11 +1815,12 @@ function returnToHome() {
   state.awaitingRevive = false;
   state.pauseTypedStartMs = 0;
   state.gameOverTypedStartMs = 0;
-  state.touchControl.active = false;
-  state.touchControl.pointerId = null;
   state.time = 0;
   state.spawnTimer = 0;
   state.eventsTriggered = 0;
+  state.level2PauseEventsTriggered = 0;
+  state.level2PauseNextAt = Infinity;
+  state.level2PauseActiveUntil = -1;
   state.hazards.length = 0;
   state.keys.clear();
   state.player.x = canvas.width / 2 - state.player.w / 2;
@@ -2027,35 +2079,31 @@ if (hudEl && gameTitleEl) {
   });
 }
 
-if (canvas) {
-  canvas.addEventListener("pointerdown", (e) => {
-    if (e.pointerType !== "touch") return;
-    state.touchControl.active = true;
-    state.touchControl.pointerId = e.pointerId;
-    setTouchTargetFromClient(e.clientX, e.clientY);
-    canvas.setPointerCapture?.(e.pointerId);
+function bindMobileControl(buttonEl, key) {
+  if (!buttonEl) return;
+  const press = (e) => {
     e.preventDefault();
-  });
-
-  canvas.addEventListener("pointermove", (e) => {
-    if (e.pointerType !== "touch") return;
-    if (!state.touchControl.active) return;
-    if (state.touchControl.pointerId !== null && e.pointerId !== state.touchControl.pointerId) return;
-    setTouchTargetFromClient(e.clientX, e.clientY);
+    state.keys.add(key);
+  };
+  const release = (e) => {
     e.preventDefault();
-  });
-
-  const endTouchControl = (e) => {
-    if (e.pointerType !== "touch") return;
-    if (!state.touchControl.active) return;
-    if (state.touchControl.pointerId !== null && e.pointerId !== state.touchControl.pointerId) return;
-    state.touchControl.active = false;
-    state.touchControl.pointerId = null;
+    state.keys.delete(key);
   };
 
-  canvas.addEventListener("pointerup", endTouchControl);
-  canvas.addEventListener("pointercancel", endTouchControl);
-  canvas.addEventListener("pointerleave", endTouchControl);
+  buttonEl.addEventListener("pointerdown", press);
+  buttonEl.addEventListener("pointerup", release);
+  buttonEl.addEventListener("pointercancel", release);
+  buttonEl.addEventListener("pointerleave", release);
+}
+
+if (mobileControlsEl) {
+  mobileControlsEl.hidden = !HAS_TOUCH_CONTROLS;
+  if (HAS_TOUCH_CONTROLS) {
+    bindMobileControl(ctrlUpEl, "ArrowUp");
+    bindMobileControl(ctrlLeftEl, "ArrowLeft");
+    bindMobileControl(ctrlDownEl, "ArrowDown");
+    bindMobileControl(ctrlRightEl, "ArrowRight");
+  }
 }
 
 window.addEventListener("resize", resizeCanvas);

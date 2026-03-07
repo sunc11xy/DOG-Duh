@@ -614,7 +614,50 @@ canvas {
   height: 100vh;
   border: 0;
   background: #040404;
+  touch-action: manipulation;
+}
+
+.mobile-controls {
+  position: fixed;
+  z-index: 22;
+  right: 12px;
+  bottom: 14px;
+  width: 176px;
+  height: 176px;
+  display: none;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.mc-btn {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(10, 10, 10, 0.72);
+  color: #f8f8f8;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   touch-action: none;
+}
+
+.mc-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.mc-btn.up { grid-column: 2; grid-row: 1; }
+.mc-btn.left { grid-column: 1; grid-row: 2; }
+.mc-btn.down { grid-column: 2; grid-row: 3; }
+.mc-btn.right { grid-column: 3; grid-row: 2; }
+
+@media (pointer: coarse) {
+  .mobile-controls {
+    display: grid;
+  }
 }
 
 @media (max-width: 640px) {
